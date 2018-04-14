@@ -104,6 +104,7 @@ import com.archos.medialib.Subtitle;
 import com.archos.mediaprovider.NetworkState;
 import com.archos.mediaprovider.video.VideoStore;
 import com.archos.mediascraper.ScrapeDetailResult;
+import com.archos.environment.ArchosUtils;
 
 import java.io.FileReader;
 import java.io.IOException;
@@ -148,6 +149,7 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
     // accessed from SubtitleSettingsDialog
     /* package */ public static final String KEY_SUBTITLE_SIZE = "pref_play_subtitle_size_key";
     /* package */ public static final String KEY_SUBTITLE_VPOS = "pref_play_subtitle_vpos_key";
+    public static final String KEY_SUBTITLE_OUTLINE = "pref_play_subtitle_outline_key";
     public static final String KEY_SUBTITLE_COLOR = "pref_play_subtitle_color_key";
     private static final String KEY_PLAYER_FORMAT = "player_pref_format_key";
     private static final String KEY_PLAYER_AUTO_FORMAT = "player_pref_auto_format_key";
@@ -327,6 +329,7 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
     private int mSubtitleSizeDefault;
     private int mSubtitleVPosDefault;
     private int mSubtitleColorDefault;
+    private boolean mSubtitleOutlineDefault;
     private boolean mAudioSubtitleNeedUpdate = false;
     private int mNewSubtitleTrack = -1;
     private int mNewAudioTrack = -1;
@@ -538,6 +541,7 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
         mSubtitleSizeDefault = getResources().getInteger(R.integer.player_pref_subtitle_size_default);
         mSubtitleVPosDefault = getResources().getInteger(R.integer.player_pref_subtitle_vpos_default);
         mSubtitleColorDefault = Color.parseColor(getResources().getString(R.string.subtitle_color_default));
+        mSubtitleOutlineDefault = false;
         mSurfaceController = new SurfaceController(mRootView);
 
 
@@ -1354,7 +1358,7 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
         AudioDelayTVPicker tvPicker = (AudioDelayTVPicker)LayoutInflater.from(mContext)
                 .inflate(R.layout.audio_delay_tv_picker, null);
 
-        tvPicker.setStep(50);
+        tvPicker.setStep(20);
         if (mPlayer.getDuration() > 0) {
             tvPicker.setMax(mPlayer.getDuration());
             tvPicker.setMin(-mPlayer.getDuration());
@@ -2334,7 +2338,7 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
             case DIALOG_AUDIO_DELAY:
                 mPlayerController.hide();
                 AudioDelayPickerDialog dialog = (AudioDelayPickerDialog)masterDialog;
-                dialog.setStep(50);
+                dialog.setStep(20);
                 if (mPlayer.getDuration() > 0) {
                     dialog.setMax(mPlayer.getDuration());
                     dialog.setMin(-mPlayer.getDuration());
@@ -2618,7 +2622,9 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
         mAudioInfoController.clear();
         mSubtitleManager.stop();
         mPlayerController.stop();
-        sendBroadcast(new Intent(STOPPED_VIDEO_INTENT));
+        Intent intent = new Intent(STOPPED_VIDEO_INTENT);
+        intent.setPackage(ArchosUtils.getGlobalContext().getPackageName());
+        sendBroadcast(intent);
 
     }
 
@@ -3240,9 +3246,11 @@ IndexHelper.Listener, PermissionChecker.PermissionListener {
                 int size = preferences.getInt(KEY_SUBTITLE_SIZE, mSubtitleSizeDefault);
                 int vpos = preferences.getInt(KEY_SUBTITLE_VPOS, mSubtitleVPosDefault);
                 int color = preferences.getInt(KEY_SUBTITLE_COLOR, mSubtitleColorDefault);
+                boolean outline = preferences.getBoolean(KEY_SUBTITLE_OUTLINE, mSubtitleOutlineDefault);
                 mSubtitleManager.setSize(size);
                 mSubtitleManager.setColor(color);
                 mSubtitleManager.setVerticalPosition(vpos);
+                mSubtitleManager.setOutlineState(outline);
 
                 // If no language set for subs, set the user favorite. Or system language if none.
                 if (!mHideSubtitles && mVideoInfo.subtitleTrack == -1) {

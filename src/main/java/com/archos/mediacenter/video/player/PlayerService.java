@@ -61,6 +61,7 @@ import com.archos.mediaprovider.video.VideoStore;
 import com.archos.mediaprovider.video.VideoStoreImportImpl;
 import com.archos.mediascraper.BaseTags;
 import com.archos.mediascraper.ScrapeDetailResult;
+import com.archos.environment.ArchosUtils;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -135,6 +136,7 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
     public static final String FULLSCREEN_INTENT = "playerservice.fullscreen";
     public static final String PLAYLIST_ID = "playlist_id";
     public static final String VIDEO = "extra_video";
+    private static final long AUTO_SAVE_INTERVAL = 30000;
     public static PlayerService sPlayerService;
     private SharedPreferences mPreferences;
     private PlayerFrontend mPlayerFrontend;
@@ -191,6 +193,7 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
     private NotificationCompat.Builder mNotificationBuilder;
     private String mSubsFavoriteLanguage;
     private boolean mDestroyed;
+    private Runnable mAutoSaveTask;
 
     public enum PlayerState {
         INIT,
@@ -378,6 +381,14 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
         Log.d(TAG, "onCreate()");
         sPlayerService = this;
         mHandler = new Handler();
+        mAutoSaveTask = new Runnable(){
+
+            @Override
+            public void run() {
+                saveVideoStateIfReady();
+                mHandler.postDelayed(mAutoSaveTask, AUTO_SAVE_INTERVAL);
+            }
+        };
         mVideoObserver = new VideoObserver(new Handler());
         mPreferences = PreferenceManager.getDefaultSharedPreferences(this);
 
@@ -385,7 +396,9 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
             mTraktClient = new TraktService.Client(this, mTraktListener, false);
         }
         setPlayer();
-        sendBroadcast(new Intent(PLAYER_SERVICE_STARTED));
+        Intent intent = new Intent(PLAYER_SERVICE_STARTED);
+        intent.setPackage(ArchosUtils.getGlobalContext().getPackageName());
+        sendBroadcast(intent);
     }
 
     /* init variables from intent
@@ -683,12 +696,10 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
         }
     }
 
-    public void stopAndSaveVideoState(){
-        Log.d(TAG, "stopAndSaveVideoState");
+    public void saveVideoStateIfReady(){
         if(mIndexHelper!=null) {
-            mIndexHelper.abort(); //too late : do not retrieve db info
             if ((mPlayerState != PlayerState.INIT && mPlayerState != PlayerState.PREPARING)) {// if it has really been played at least once, otherwise it would overwrite lastresume with 0
-
+                Log.d(TAG, "saveVideoStateIfReady");
                 if (mLastPosition != LAST_POSITION_END) //if last position, we went there through "onCompletion"
                     mLastPosition = getBookmarkPosition();
                 if (mVideoInfo != null && !PrivateMode.isActive()) {
@@ -697,18 +708,31 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
                     if (duration > 0)
                         mVideoInfo.duration = duration;
                     mVideoInfo.lastTimePlayed = Long.valueOf(System.currentTimeMillis() / 1000L);
-                    stopTrakt(); //this writes mVideoInfo.traktResume
                     mIndexHelper.writeVideoInfo(mVideoInfo, mNetworkBookmarksEnabled);
-                    sendBroadcast(new Intent(BootupRecommandationService.UPDATE_ACTION));
+                    startTrakt(); //this writes mVideoInfo.traktResume
+
+                    Intent intent = new Intent(BootupRecommandationService.UPDATE_ACTION);
+                    intent.setPackage(ArchosUtils.getGlobalContext().getPackageName());
+                    sendBroadcast(intent);
 
                 }
             }
+        }
+    }
 
+    public void stopAndSaveVideoState(){
+        Log.d(TAG, "stopAndSaveVideoState");
+        if(mIndexHelper!=null) {
+            mIndexHelper.abort(); //too late : do not retrieve db info
+            saveVideoStateIfReady();
+            if ((mPlayerState != PlayerState.INIT && mPlayerState != PlayerState.PREPARING))
+                stopTrakt();
             if (mUpdateNextTask != null) {
                 mUpdateNextTask.cancel(false);
                 mUpdateNextTask.setListener(null);
                 mUpdateNextTask = null;
             }
+            mHandler.removeCallbacks(mAutoSaveTask);
             mPlayer.pause();
             mPlayer.stopPlayback();
             mPlayerState = PlayerState.STOPPED;
@@ -790,14 +814,12 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
             mTraktError = false;
             mTraktLiveScrobblingEnabled = Trakt.isLiveScrobblingEnabled(mPreferences);
             if (mTraktLiveScrobblingEnabled) {
-                if (!mTraktWatching) {
-                    int progress = getPlayerProgress();
-                    mVideoInfo.traktResume = -progress;
-                    mVideoInfo.duration = Player.sPlayer.getDuration();
-                    mTraktClient.watching(mVideoInfo, progress);
-                    mHandler.postDelayed(mTraktWatchingRunnable, Trakt.WATCHING_DELAY_MS);
-                    mTraktWatching = true;
-                }
+                 int progress = getPlayerProgress();
+                mVideoInfo.traktResume = -progress;
+                mVideoInfo.duration = Player.sPlayer.getDuration();
+                mTraktClient.watching(mVideoInfo, progress);
+                mHandler.postDelayed(mTraktWatchingRunnable, Trakt.WATCHING_DELAY_MS);
+                mTraktWatching = true;
             }
         }
     }
@@ -1017,6 +1039,7 @@ public class PlayerService extends Service implements Player.Listener, IndexHelp
             }
             setPlayMode(mPlayMode, false); //look for next uri
             setAudioFilt();
+            mHandler.postDelayed(mAutoSaveTask, AUTO_SAVE_INTERVAL);
         }
     }
 

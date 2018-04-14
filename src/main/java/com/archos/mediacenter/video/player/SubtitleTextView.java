@@ -22,17 +22,23 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.text.TextPaint;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.Surface;
 import android.widget.TextView;
 
 public class SubtitleTextView extends TextView {
+
     private static final String TAG = "SubtitleTextView";
    
     private Surface mExternalSurface = null;
+
+    private static boolean mOutline = false;
    
     public SubtitleTextView(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
+
+    public void setOutlineState(boolean outline) { mOutline = outline; }
     
     @Override
     public void setVisibility(int visibility) {
@@ -72,16 +78,19 @@ public class SubtitleTextView extends TextView {
             } catch (Exception ignored) {
             }
         }
-        TextPaint paint = getPaint();
-        int color = getCurrentTextColor();
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeJoin(Paint.Join.MITER);
-        paint.setStrokeMiter(1.0f);
-        paint.setStrokeWidth(4.0f);
-        setTextColor(Color.BLACK);
-        super.onDraw(c);
-        paint.setStyle(Paint.Style.FILL);
-        setTextColor(color);
+        // disable for now nice outline since it is too slow on lowend CPU/GPU (e.g. RK3128)
+        if (mOutline) {
+            TextPaint paint = getPaint();
+            int color = getCurrentTextColor();
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeJoin(Paint.Join.MITER);
+            paint.setStrokeMiter(1.0f);
+            paint.setStrokeWidth(4.0f);
+            setTextColor(Color.BLACK);
+            super.onDraw(c);
+            paint.setStyle(Paint.Style.FILL);
+            setTextColor(color);
+        }
         super.onDraw(c);
         if (c != canvas) {
             c.restore();
